@@ -17,22 +17,37 @@ inline void simple_error(string s)	// write ``error: s and exit program
 	exit(1);
 }
 
+struct item {
+	int the_number;
+	bool is_prime;
+	bool harvested;
+};
+
+//functions
+int sieve_init(vector<item>& s, int sieve_s, int sieve_c);
+int get_next_pot_prime(vector<item>& s, int index);
+int is_multiple_of_prime(int number, vector<int>& p);  //returns 0 if prime, otherwise returns first multiple found
+int mark_multiples(vector<item>& s, int start, int multiple);
+int harvest_primes(vector<item>& s, vector<int>& p);
+int calc_stop_sieving(vector<item>& s, vector<int> p);
+int print_sieve(vector<item>& s);
+
 int main() {
-	int num_primes{ 1 };
+	int num_primes{ 0 };
 	int sieve_max{ 100 };
 	int sieve_count{ 0 };
+	int sieve_stop_sieving{ 0 };
 	int jump{ 0 };
 	int index{ 0 };
+	int gp_return_value{ -1 };
+	int current_sieve_index{ 0 };
+
 	vector<int> primes;
 
-	struct item {
-		int the_number;
-		bool is_prime;
-	};
-
-	item temp_item;
+	item temp_item{ 0,true, false };
 
 	vector<item> sieve;
+
 
 	cout << "Now many primes to find? ";
 	cin >> num_primes;
@@ -41,61 +56,156 @@ int main() {
 	cout << "\nHow large a sieve? ";
 	cin >> sieve_max;
 
+
 	while (primes.size() < num_primes) {
 		// initialize the sieve
 		cout << "Sieve Count = " << sieve_count << "\n";
 		cout << "Number of primes found = " << primes.size() << "\n";
-		if (sieve_count == 0) {			//true for the first sieve  (Might mot need this)
-			for (int i = 1; i <= sieve_max;++i) {
-				temp_item.the_number = i;
-				temp_item.is_prime = true;
-				sieve.push_back(temp_item);
-			}
-		}
-		else {								//for all subsequent sieves
-			for (int i = (sieve_count * sieve_max) + 1; i <= sieve_max * (sieve_count + 1);++i) {
-				temp_item.the_number = i;
-				temp_item.is_prime = true;
-				sieve.push_back(temp_item);
-			}
-		}
+
+		cout << "Ready to initialize sieve. enter a char to proceed...";
+		keep_window_open();
+		gp_return_value = sieve_init(sieve, sieve_max, sieve_count);   //passing sieve by reference - will modify
+		cout << "Sieve initialized enter a char to proceed...";
+		gp_return_value = print_sieve(sieve);
+		keep_window_open();
 
 		// do the sieving
-		if (sieve[0].the_number == 1) sieve[0].is_prime = false;   //take care of the number 1
+		// Stop sieveing when the_number squared in greater than the_number of last element of sieve
 
-																   // mark multiple up to the when the_number saquared > max
-		for (int i = 1; sieve[i].the_number * sieve[i].the_number < sieve[sieve_max - 1].the_number;++i) {
-			//find the next prime
-			for (int i = 1; i < sieve_max; i++) {
-				if (sieve[i].is_prime == true) {					//found a potentially prime number
-																	// check to see if there are any primes to check it against
-					if (primes.size() > 0) {							//there are some primes already found
-																		// check if this number is a multiple of one of the primes already fournd
-						for (int y = 0;y < primes.size();++y) {
-							if (sieve[i].the_number % primes[y] == 0) {
-								sieve[i].is_prime = false;
-								jump = primes[y];
-								break;
-							}
-						}
-					}
-					jump = sieve[i].the_number;
-				}
-				index = i + jump;
-				while (index < sieve_max) {
-					sieve[index].is_prime = false;
-					index += jump;
-				}
+		sieve_stop_sieving = calc_stop_sieving(sieve,primes);
+		cout << "sieve stopper is " << sieve_stop_sieving << "\n";
+
+		while(sieve[current_sieve_index].the_number <= sieve_stop_sieving) {
+//		while(primes.back() * primes.back() < sieve.back().the_number){
+			// get the index of the next potentially prime number
+
+			current_sieve_index = get_next_pot_prime(sieve, current_sieve_index);
+
+			// check to see if mulitple of primes already found
+
+			jump = is_multiple_of_prime(sieve[current_sieve_index].the_number, primes);
+
+			if (jump != 0) {		//the number is not prime
+				gp_return_value = mark_multiples(sieve, current_sieve_index, jump);   //mark multiples
+			}
+			else {
+				primes.push_back(sieve[current_sieve_index].the_number);
+				sieve[current_sieve_index].harvested = true;
+				gp_return_value = mark_multiples(sieve, current_sieve_index, sieve[current_sieve_index].the_number);   //mark multiples
+				current_sieve_index += 1;
 			}
 		}
-		//harvest the primes
-		for (int i = 0;i < sieve_max;i++) {
-			if (sieve[i].is_prime == true) {
-				primes.push_back(sieve[i].the_number);
-				cout << sieve[i].the_number << "\n";
-			}
-		}
+	//harvest the primes
+		print_sieve(sieve);
+		gp_return_value = harvest_primes(sieve, primes);
 		sieve_count += 1;
+		current_sieve_index = 0;
 	}
+	cout << "Found the first " << num_primes << ": \n";
+	for (int i = 0;i < primes.size();i++) {
+		if (i % 10 == 0) cout << "\n";
+		cout << primes[i] << "\t";
+	}
+	cout << "all done\n";
 	keep_window_open();
 }
+
+int sieve_init(vector<item>& s, int sieve_s, int sieve_c) {
+	item temp_item{ 0, true, false};
+
+	int intitial_number = (sieve_c * sieve_s) + 1;
+	int sieve_upper_limit = sieve_s * (sieve_c + 1);
+
+	cout << "---Sieve_init\n";
+	if (s.size() != 0) s.clear();
+
+	for (int i = intitial_number; i <= sieve_upper_limit; ++i) {
+		temp_item.the_number = i;
+		temp_item.is_prime = true;
+		temp_item.harvested = false;
+		if (i == 1) temp_item.is_prime = false;     //taking care of the number 1 defined as not prime
+		s.push_back(temp_item);
+	}
+	return(1);
+}
+
+int get_next_pot_prime(vector<item>& s, int index) {
+	
+	cout << "---Get_next_pot_prime -- ";
+	for (int i = index; i <= s.size(); i++) {
+		if (s[i].is_prime == true) {
+			cout << i << "\n"; return i;
+		}
+		else continue;
+	}
+}
+
+int is_multiple_of_prime(int number, vector<int>& p) {
+
+	cout << "---Is_multiple_of_prime\n";
+	if (p.size() == 0) return 0;
+	for (int i = 0;i < p.size();++i) {
+		if (number % p[i] == 0) return p[i];
+	}
+	return 0;
+}
+
+int mark_multiples(vector<item>& s, int start, int multiple) {
+	int upper_limit = s.size()-1;
+	cout << "---Mark_multiples\n";
+	for (int i = start; i <= upper_limit; i += multiple) {
+		if(s[i].harvested != true) s[i].is_prime = false;
+	}
+	return 0;
+}
+
+int harvest_primes(vector<item>& s, vector<int>& p) {
+	int count{ 0 };
+	cout << "---Harvest_primes\n";
+	for (int i = 0;i < s.size();i++) {
+		if (s[i].is_prime == true && s[i].harvested == false) {
+			p.push_back(s[i].the_number);
+			cout << s[i].the_number << "\n";
+			count += 1;
+		}
+	}
+	return count;
+}
+int calc_stop_sieving(vector<item>& s, vector<int> p) {
+	cout << "---Calc_stop_sieving\n";
+	int check{ 0 };
+
+	float sqroot{ 0.0 };
+
+	sqroot = sqrt(s.back().the_number);
+
+	check = trunc(sqroot);
+
+	for (int i = 0; i < s.size(); i++) {
+		if (check*i > s.back().the_number) return check * (i - 1);
+	}
+}
+
+/*	if(p.size() == 0){
+		for (int i = 0; i <= s.size();i++) {
+			check = s[i].the_number;
+			if (check * check > s.back().the_number) return s[i].the_number;
+		}
+	}
+	else {
+		for (int i = 0; i <= p.size() - 1; i++) {
+			check = p[i];
+			cout << "check is " << p[i] << "\n";
+			if ((2 * p[i]) >= s.back().the_number) return p[i-1];
+		}
+	}*/
+
+
+int print_sieve(vector<item>& s) {
+	cout << "current sieve: \n";
+	for (int i = 0;i < s.size();i++) {
+		cout << s[i].the_number << "\t" << s[i].is_prime << "\t" << s[i].harvested << "\n";
+	}
+	return 0;
+}
+
